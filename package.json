@@ -1,0 +1,15 @@
+{
+  "name": "room-scheduler",
+  "version": "1.0.0",
+  "description": "class project",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "RoomScheduler"
+  },
+  "author": "tom warner",
+  "license": "ISC"
+}
