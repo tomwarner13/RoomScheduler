@@ -11,5 +11,8 @@
     "url": "RoomScheduler"
   },
   "author": "tom warner",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.16.1"
+  }
 }
