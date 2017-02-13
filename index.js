@@ -58,9 +58,15 @@ class EventResult {
     }
 }
 
+const illegalEventWarn = "Event cannot have an end time equal or prior to the start time!";
+
+function isIllegalEvent(event) {
+    return event.start >= event.end;
+}
+
 function checkEvent(newEvent, events) {
-  if(newEvent.start >= newEvent.end) {
-    return new EventResult(false, "Event cannot have an end time equal or prior to the start time!");
+  if(isIllegalEvent(newEvent)) {
+    return new EventResult(false, illegalEventWarn);
   }
 
   for(var i in events) {
@@ -68,7 +74,7 @@ function checkEvent(newEvent, events) {
 
     if(event.end > newEvent.start) {
       if(event.start >= newEvent.end) {
-        newEvent._id = uuidV4();
+        newEvent._id = newEvent._id || uuidV4(); //generate ID only if new event
         events.splice(i, 0, newEvent);
         return new EventResult(true);
       }
@@ -76,9 +82,53 @@ function checkEvent(newEvent, events) {
     }
   }
 
-  newEvent._id = uuidV4();
+  newEvent._id = newEvent._id || uuidV4();
   events.push(newEvent);
   return new EventResult(true);
+}
+
+function modifyEvent(updatedEvent, events) {    
+  if(isIllegalEvent(updatedEvent)) {
+    return new EventResult(false, illegalEventWarn);
+  }
+
+  for(var i in events) {
+    var event = events[i];
+
+    if(event._id === updatedEvent._id) {
+        if(updatedEvent.start === undefined && updatedEvent.end === undefined) {
+            event.description = updatedEvent.description || "";
+            return new EventResult(true);
+        }
+
+        //if only start time is modified, check if it conflicts with the immediate previous event
+        if(updatedEvent.end === undefined) {
+            if(!events[i - 1] || events[i - 1].end <= updatedEvent.start) {
+                event.start = updatedEvent.start;
+                if(isIllegalEvent(event)) return new EventResult(false, illegalEventWarn);
+                event.description = updatedEvent.description || "";
+                return new EventResult(true);
+            }
+        }
+
+        //if only end time is modified, check if it conflicts with the immediate next event
+        if(updatedEvent.start === undefined) {
+            if(!events[i + 1] || events[i + 1].start >= updatedEvent.end) {
+                event.end = updatedEvent.end;
+                if(isIllegalEvent(event)) return new EventResult(false, illegalEventWarn);
+                event.description = updatedEvent.description || "";
+                return new EventResult(true);
+            }
+        }
+
+        //if both start and end have changed, we need to remove it and treat it as added, since we don't know where it belongs in the order anymore
+        updatedEvent.description = updatedEvent.description || event.description;
+        events.splice(i, 1);
+        return checkEvent(updatedEvent, events);
+    }
+  }
+
+  return new EventResult(false, "Event not found!");
 }
 
 
@@ -173,12 +223,68 @@ app.post('/api/rooms/:name/events', (req, res) => {
   });
 })
 
-app.put('api/rooms/:name/events/:eventId', (req, res) => {
-    //modify event
+app.put('/api/rooms/:name/events/:eventId', (req, res) => {
+    MongoClient.connect(dbUrl, function(err, db) {
+    assert.equal(null, err);
+
+    var rooms = db.collection('rooms');
+
+    rooms.findOne({ name: req.params.name }, function(err, room) {
+        assert.equal(null, err);
+
+        if(room === null) {
+            res.status(404).send(`Room ${req.params.name} not found!`);
+            return;
+        }
+
+        var event = req.body;
+        event._id = req.params.eventId;
+        var result = modifyEvent(event, room.events);
+        if(result.success) {
+            rooms.updateOne({ _id: room._id }, { $set: { events: room.events }}, (err, updateResult) => {
+                assert.equal(null, err);
+
+                res.send(result.message);
+            });
+        }
+        else
+        {
+            res.status(422).send(result.message);
+        }
+    });
+  });
 })
 
-app.delete('api/rooms/:name/events/:eventId', (req, res) => {
-    //delete event
+app.delete('/api/rooms/:name/events/:eventId', (req, res) => {
+    MongoClient.connect(dbUrl, function(err, db) {
+    assert.equal(null, err);
+
+    var rooms = db.collection('rooms');
+
+    rooms.findOne({ name: req.params.name }, function(err, room) {
+        assert.equal(null, err);
+
+        if(room === null) {
+            res.status(404).send(`Room ${req.params.name} not found!`);
+            return;
+        }
+
+        for(let i in room.events) {
+            var event = room.events[i];
+            
+            if(event._id === req.params.eventId) {
+                room.events.splice(i, 1);
+                rooms.updateOne({ _id: room._id }, { $set: { events: room.events }}, (err, updateResult) => {
+                    assert.equal(null, err);
+
+                    res.send("event deleted!");
+                });
+                return;
+            }
+        }
+        res.status(404).send("Event not found!");
+    });
+  });
 })
 
 app.listen(3000, function () {
