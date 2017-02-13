@@ -3,9 +3,11 @@ const app = express();
 
 const MongoClient = require('mongodb').MongoClient;
 const ObjectId = require('mongodb').ObjectID;
+
 const assert = require('assert');
 
 const bodyParser = require('body-parser');
+app.use(bodyParser.json());
 
 const dbUrl = 'mongodb://localhost:12345/rooms';
 
@@ -42,9 +44,21 @@ function clearRooms(db, callback) {
     callback();
 }
 
+class EventResult {
+    constructor(success, message, conflictingEvent) {
+        if(success) {
+            this.message = "Success";
+        } else {
+            this.message = message;
+        }
+        this.success = success;
+        this.conflictingEvent = conflictingEvent || {};
+    }
+}
+
 function checkEvent(newEvent, events) {
   if(newEvent.start >= newEvent.end) {
-    return false; //cannot have zero or negative-length event
+    return new EventResult(false, "Event cannot have an end time equal or prior to the start time!");
   }
 
   for(var i in events) {
@@ -53,14 +67,14 @@ function checkEvent(newEvent, events) {
     if(event.end > newEvent.start) {
       if(event.start >= newEvent.end) {
         events.splice(i, 0, newEvent);
-        return true;
+        return new EventResult(true);
       }
-      return false;
+      return new EventResult(false, "Conflicts with another event!", event);
     }
   }
 
   events.push(newEvent);
-  return true;
+  return new EventResult(true);
 }
 
 
@@ -126,7 +140,33 @@ app.post('/api/rooms/clear', (req, res) => {
 //stubbing out rest of API for now so there's something to develop against
 
 app.post('/api/rooms/:name/events', (req, res) => {
-    //add event
+    MongoClient.connect(dbUrl, function(err, db) {
+    assert.equal(null, err);
+
+    var rooms = db.collection('rooms');
+
+    rooms.findOne({ name: req.params.name }, function(err, room) {
+        assert.equal(null, err);
+
+        if(room === null) {
+            res.status(404).send(`Room ${req.params.name} not found!`);
+            return;
+        }
+
+        var result = checkEvent(req.body, room.events);
+        if(result.success) {
+            rooms.updateOne({ _id: room._id }, { $set: { events: room.events }}, (err, updateResult) => {
+                assert.equal(null, err);
+
+                res.send(result.message);
+            });
+        }
+        else
+        {
+            res.status(422).send(result.message);
+        }
+    });
+  });
 })
 
 app.put('api/rooms/:name/events/:eventId', (req, res) => {
