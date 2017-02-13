@@ -4,6 +4,8 @@ const app = express();
 const MongoClient = require('mongodb').MongoClient;
 const ObjectId = require('mongodb').ObjectID;
 
+const uuidV4 = require('uuid/v4');
+
 const assert = require('assert');
 
 const bodyParser = require('body-parser');
@@ -66,6 +68,7 @@ function checkEvent(newEvent, events) {
 
     if(event.end > newEvent.start) {
       if(event.start >= newEvent.end) {
+        newEvent._id = uuidV4();
         events.splice(i, 0, newEvent);
         return new EventResult(true);
       }
@@ -73,6 +76,7 @@ function checkEvent(newEvent, events) {
     }
   }
 
+  newEvent._id = uuidV4();
   events.push(newEvent);
   return new EventResult(true);
 }
