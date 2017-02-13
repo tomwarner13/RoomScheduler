@@ -190,8 +190,7 @@ app.post('/api/rooms/clear', (req, res) => {
   });
   res.send("cleared");
 })
-
-//stubbing out rest of API for now so there's something to develop against
+.
 
 app.post('/api/rooms/:name/events', (req, res) => {
     MongoClient.connect(dbUrl, function(err, db) {
@@ -271,7 +270,7 @@ app.delete('/api/rooms/:name/events/:eventId', (req, res) => {
 
         for(let i in room.events) {
             var event = room.events[i];
-            
+
             if(event._id === req.params.eventId) {
                 room.events.splice(i, 1);
                 rooms.updateOne({ _id: room._id }, { $set: { events: room.events }}, (err, updateResult) => {
